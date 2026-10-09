@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Трекер груп</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="script.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">localStorage tracker</p>
+        <h1>Трекер груп та учнів</h1>
+        <p class="muted">Групи, уроки, відвідуваність, домашки й статистика в одному місці.</p>
+      </div>
+    </header>
+
+    <main id="app" class="app-shell"></main>
+
+    <dialog id="groupDialog" class="modal">
+      <form id="groupForm" class="modal-card">
+        <input id="groupId" type="hidden" />
+
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">група</p>
+            <h2 id="groupDialogTitle">Нова група</h2>
+          </div>
+          <button class="icon-btn" type="button" data-action="close-group-modal" aria-label="Закрити">×</button>
+        </div>
+
+        <label class="field">
+          <span>Назва групи</span>
+          <input id="groupName" type="text" required placeholder="Наприклад: Roblox 10, Scratch Start" />
+        </label>
+
+        <label class="field">
+          <span>Курс / тип групи</span>
+          <select id="groupLevel" required></select>
+        </label>
+
+        <div class="field">
+          <span>Графік</span>
+          <div id="scheduleDays" class="day-grid"></div>
+        </div>
+
+        <label class="field">
+          <span>Час заняття</span>
+          <input id="groupTime" type="time" value="18:00" />
+        </label>
+
+        <label class="check-row">
+          <input id="groupActive" type="checkbox" checked />
+          <span>Група активна</span>
+        </label>
+
+        <p class="tiny-note">Для нової групи автоматично створюються 16 уроків з вибраного курсу. У самій групі тему й дату кожного уроку можна змінювати.</p>
+
+        <div class="modal-actions">
+          <button class="ghost-btn" type="button" data-action="close-group-modal">Скасувати</button>
+          <button class="primary-btn" type="submit">Зберегти</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="courseDialog" class="modal wide-modal">
+      <form id="courseForm" class="modal-card">
+        <input id="courseId" type="hidden" />
+
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">курс</p>
+            <h2 id="courseDialogTitle">Новий курс</h2>
+          </div>
+          <button class="icon-btn" type="button" data-action="close-course-modal" aria-label="Закрити">×</button>
+        </div>
+
+        <label class="field">
+          <span>Назва курсу</span>
+          <input id="courseName" type="text" required placeholder="Наприклад: Roblox Lua — старт" />
+        </label>
+
+        <div class="field">
+          <span>Назви 16 уроків</span>
+          <div id="courseLessons" class="course-lessons-grid"></div>
+        </div>
+
+        <p class="tiny-note">Ці теми будуть підтягуватися в нові групи. Якщо курс відредагувати пізніше, старі групи не перезаписуються, щоб не зламати вже внесену статистику.</p>
+
+        <div class="modal-actions">
+          <button class="ghost-btn" type="button" data-action="close-course-modal">Скасувати</button>
+          <button class="primary-btn" type="submit">Зберегти курс</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
