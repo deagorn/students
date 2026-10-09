@@ -369,9 +369,20 @@ h3 {
   padding: 12px;
 }
 
-.student-card strong {
-  display: block;
+.student-card-name {
+  display: inline-flex;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  padding: 0;
   margin-bottom: 8px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.student-card-name:hover {
+  color: var(--accent-dark);
+  text-decoration: underline;
 }
 
 .add-student-grid {

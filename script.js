@@ -489,9 +489,10 @@ function renderCurrentStudents(group) {
         .map(
           (student) => `
             <article class="student-card">
-              <strong>${escapeHtml(student.name)}</strong>
+              <button class="student-card-name" type="button" data-action="open-student" data-student-id="${student.id}">
+                ${escapeHtml(student.name)}
+              </button>
               <div class="card-actions">
-                <button class="ghost-btn" type="button" data-action="open-student" data-student-id="${student.id}">Картка</button>
                 <button class="danger-btn" type="button" data-action="remove-student-from-group" data-group-id="${group.id}" data-student-id="${student.id}">Прибрати з групи</button>
               </div>
             </article>
