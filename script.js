@@ -670,14 +670,15 @@ function renderHomeworkCell(group, lesson, studentId) {
 function renderAddStudentPanel(group, availableStudents) {
   return `
     <div class="add-student-grid">
-      <label class="field">
-        <span>Додати існуючого учня</span>
-        <select data-role="existing-student-select" data-group-id="${group.id}">
-          <option value="">Обери учня</option>
-          ${availableStudents.map((student) => `<option value="${student.id}">${escapeHtml(student.name)}</option>`).join("")}
-        </select>
-      </label>
-      <button class="ghost-btn" type="button" data-action="add-existing-student" data-group-id="${group.id}">Додати</button>
+      <div class="student-picker">
+        <label class="field">
+          <span>Додати існуючого учня</span>
+          <input data-role="existing-student-search" data-group-id="${group.id}" type="search" placeholder="Почни вводити ім'я учня..." autocomplete="off" />
+        </label>
+        <div class="student-picker-results" data-role="existing-student-results" data-group-id="${group.id}">
+          ${renderExistingStudentResults(group.id, "", availableStudents)}
+        </div>
+      </div>
 
       <label class="field">
         <span>Створити нового учня</span>
@@ -686,6 +687,36 @@ function renderAddStudentPanel(group, availableStudents) {
       <button class="primary-btn" type="button" data-action="create-student" data-group-id="${group.id}">Створити</button>
     </div>
   `;
+}
+
+function renderExistingStudentResults(groupId, query, availableStudents) {
+  if (!availableStudents.length) {
+    return `<div class="student-picker-empty">Усі створені учні вже додані в цю групу.</div>`;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return `<div class="student-picker-empty">Доступно учнів: ${availableStudents.length}. Введи частину імені, щоб швидко знайти потрібного.</div>`;
+  }
+
+  const results = availableStudents
+    .filter((student) => student.name.toLowerCase().includes(normalizedQuery))
+    .sort((a, b) => a.name.localeCompare(b.name, "uk"))
+    .slice(0, 12);
+
+  if (!results.length) {
+    return `<div class="student-picker-empty">Нічого не знайдено.</div>`;
+  }
+
+  return results
+    .map(
+      (student) => `
+        <button class="student-picker-option" type="button" data-action="add-found-student" data-group-id="${groupId}" data-student-id="${student.id}">
+          ${escapeHtml(student.name)}
+        </button>
+      `
+    )
+    .join("");
 }
 
 function renderCurrentStudents(group) {
@@ -993,6 +1024,7 @@ function handleClick(event) {
   if (action === "edit-group") openGroupModal(groupId);
   if (action === "toggle-group-active") toggleGroupActive(groupId);
   if (action === "add-existing-student") addExistingStudent(groupId);
+  if (action === "add-found-student") addExistingStudent(groupId, studentId);
   if (action === "create-student") createStudent(groupId);
   if (action === "remove-student-from-group") removeStudentFromGroup(groupId, studentId);
 }
@@ -1028,6 +1060,11 @@ function handleInput(event) {
     const searchInput = document.querySelector('[data-role="group-search"]');
     searchInput?.focus();
     searchInput?.setSelectionRange(ui.search.length, ui.search.length);
+    return;
+  }
+
+  if (target.dataset.role === "existing-student-search") {
+    updateExistingStudentResults(target);
     return;
   }
 
@@ -1183,10 +1220,21 @@ function toggleGroupActive(groupId) {
   render();
 }
 
-function addExistingStudent(groupId) {
+function updateExistingStudentResults(target) {
+  const group = findGroup(target.dataset.groupId);
+  if (!group) return;
+
+  const availableStudents = state.students.filter((student) => !group.studentIds.includes(student.id));
+  const results = document.querySelector(`[data-role="existing-student-results"][data-group-id="${group.id}"]`);
+  if (!results) return;
+
+  results.innerHTML = renderExistingStudentResults(group.id, target.value, availableStudents);
+}
+
+function addExistingStudent(groupId, studentIdFromSearch) {
   const group = findGroup(groupId);
   const select = document.querySelector(`[data-role="existing-student-select"][data-group-id="${groupId}"]`);
-  const studentId = select?.value;
+  const studentId = studentIdFromSearch || select?.value;
   if (!group || !studentId || group.studentIds.includes(studentId)) return;
 
   group.studentJoin ||= {};
