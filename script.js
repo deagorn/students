@@ -146,7 +146,7 @@ const groupDialogTitle = document.querySelector("#groupDialogTitle");
 const courseDialog = document.querySelector("#courseDialog");
 const courseForm = document.querySelector("#courseForm");
 const courseDialogTitle = document.querySelector("#courseDialogTitle");
-const ui = { search: "", dashboardView: "today" };
+const ui = { search: "", dashboardView: "today", groupView: "lessons" };
 
 let state = loadState();
 
@@ -432,27 +432,239 @@ function renderGroupPage(groupId) {
       </section>
 
       <section class="section">
-        <div class="section-head">
-          <h2>Уроки</h2>
-          <span class="tag">16 уроків</span>
-        </div>
-        <div class="lessons-list">
-          ${group.lessons.map((lesson, index) => renderLesson(group, lesson, index)).join("")}
-        </div>
-      </section>
-
-      <section class="section panel">
-        <div class="section-head">
-          <div>
-            <h2>Статистика групи</h2>
-            <p class="muted">Рахується тільки за уроками, де увімкнено “Урок проведено”.</p>
-          </div>
-        </div>
-        ${renderGroupWarnings(group)}
-        ${renderGroupStatsTable(group)}
+        ${renderGroupTabs(group)}
+        ${renderGroupPanel(group)}
       </section>
     </section>
   `;
+}
+
+function renderGroupTabs(group) {
+  const stats = getGroupStats(group);
+
+  return `
+    <div class="group-tabs">
+      ${renderGroupTabButton("lessons", "Уроки", group.lessons.length)}
+      ${renderGroupTabButton("stats", "Загальна статистика", stats.heldLessons)}
+      ${renderGroupTabButton("attendance", "Журнал відвідуваності", stats.totalMisses)}
+      ${renderGroupTabButton("homework", "Журнал ДЗ", stats.totalHomeworkMissing)}
+    </div>
+  `;
+}
+
+function renderGroupTabButton(view, label, count) {
+  const activeClass = ui.groupView === view ? "active" : "";
+
+  return `
+    <button class="group-tab ${activeClass}" type="button" data-action="set-group-view" data-view="${view}">
+      <span>${label}</span>
+      <strong>${count}</strong>
+    </button>
+  `;
+}
+
+function renderGroupPanel(group) {
+  if (ui.groupView === "stats") {
+    return renderGroupStatsPanel(group);
+  }
+
+  if (ui.groupView === "attendance") {
+    return renderAttendanceJournal(group);
+  }
+
+  if (ui.groupView === "homework") {
+    return renderHomeworkJournal(group);
+  }
+
+  return renderLessonsPanel(group);
+}
+
+function renderLessonsPanel(group) {
+  return `
+    <div class="tab-panel">
+      <div class="section-head">
+        <h2>Уроки</h2>
+        <span class="tag">16 уроків</span>
+      </div>
+      <div class="lessons-list">
+        ${group.lessons.map((lesson, index) => renderLesson(group, lesson, index)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderGroupStatsPanel(group) {
+  return `
+    <div class="tab-panel panel">
+      <div class="section-head">
+        <div>
+          <h2>Загальна статистика</h2>
+          <p class="muted">Рахується тільки за уроками, де увімкнено “Урок проведено”.</p>
+        </div>
+      </div>
+      ${renderConsecutiveMisses(group)}
+      ${renderGroupWarnings(group)}
+      ${renderGroupStatsTable(group)}
+    </div>
+  `;
+}
+
+function renderConsecutiveMisses(group) {
+  const rows = getGroupStudentsForJournal(group)
+    .map((student) => ({
+      ...student,
+      streak: getMissStreakInfo(group, student.id),
+    }))
+    .filter((row) => row.streak.current >= 2 || row.streak.max >= 2);
+
+  if (!rows.length) {
+    return `<div class="empty-state">Немає учнів із 2 пропусками підряд.</div>`;
+  }
+
+  const activeRows = rows.filter((row) => row.streak.current >= 2);
+  const pastRows = rows.filter((row) => row.streak.current < 2 && row.streak.max >= 2);
+
+  return `
+    <div class="warning-list">
+      ${activeRows
+        .map(
+          (row) => `
+            <div class="warning-item danger-warning">
+              <strong>${escapeHtml(row.name)}</strong>: зараз ${row.streak.current} пропуски підряд
+              <span class="muted">(${escapeHtml(row.streak.currentDates.join(", "))})</span>
+            </div>
+          `
+        )
+        .join("")}
+      ${pastRows
+        .map(
+          (row) => `
+            <div class="warning-item">
+              <strong>${escapeHtml(row.name)}</strong>: було ${row.streak.max} пропуски підряд
+              <span class="muted">(${escapeHtml(row.streak.maxDates.join(", "))})</span>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderAttendanceJournal(group) {
+  const lessons = getHeldLessons(group);
+  const students = getGroupStudentsForJournal(group);
+
+  if (!lessons.length) {
+    return `<div class="tab-panel empty-state">Ще немає проведених уроків для журналу відвідуваності.</div>`;
+  }
+
+  return `
+    <div class="tab-panel panel">
+      <div class="section-head">
+        <div>
+          <h2>Журнал відвідуваності</h2>
+          <p class="muted">Зверху дата уроку, зліва учні. “Н” означає пропуск, “—” означає, що учень тоді ще не рахувався в групі.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="journal-table">
+          <thead>
+            <tr>
+              <th>Учень</th>
+              ${lessons.map((lesson) => `<th title="${escapeHtml(lesson.topic)}">${escapeHtml(formatJournalDate(lesson))}</th>`).join("")}
+              <th>Пропусків</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students
+              .map((student) => {
+                const missed = countMissedLessons(group, student.id);
+
+                return `
+                  <tr>
+                    <td><button class="student-link" type="button" data-action="open-student" data-student-id="${student.id}">${escapeHtml(student.name)}</button></td>
+                    ${lessons.map((lesson) => renderAttendanceCell(group, lesson, student.id)).join("")}
+                    <td><strong>${missed}</strong></td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderHomeworkJournal(group) {
+  const lessons = getHeldLessons(group);
+  const students = getGroupStudentsForJournal(group);
+
+  if (!lessons.length) {
+    return `<div class="tab-panel empty-state">Ще немає проведених уроків для журналу ДЗ.</div>`;
+  }
+
+  return `
+    <div class="tab-panel panel">
+      <div class="section-head">
+        <div>
+          <h2>Журнал ДЗ</h2>
+          <p class="muted">“✓” — здано, “Ні” — не здано, “—” — учень тоді ще не рахувався в групі.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="journal-table">
+          <thead>
+            <tr>
+              <th>Учень</th>
+              ${lessons.map((lesson) => `<th title="${escapeHtml(lesson.topic)}">${escapeHtml(formatJournalDate(lesson))}</th>`).join("")}
+              <th>ДЗ не здано</th>
+              <th>Пропусків</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students
+              .map((student) => {
+                const homeworkMissing = countHomeworkMissing(group, student.id);
+                const missed = countMissedLessons(group, student.id);
+
+                return `
+                  <tr>
+                    <td><button class="student-link" type="button" data-action="open-student" data-student-id="${student.id}">${escapeHtml(student.name)}</button></td>
+                    ${lessons.map((lesson) => renderHomeworkCell(group, lesson, student.id)).join("")}
+                    <td><strong>${homeworkMissing}</strong></td>
+                    <td><strong>${missed}</strong></td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderAttendanceCell(group, lesson, studentId) {
+  if (!shouldCountStudentLesson(group, lesson, studentId)) {
+    return `<td><span class="journal-mark neutral">—</span></td>`;
+  }
+
+  const record = getRecord(lesson, studentId);
+  return record.present
+    ? `<td><span class="journal-mark present">✓</span></td>`
+    : `<td><span class="journal-mark absent">Н</span></td>`;
+}
+
+function renderHomeworkCell(group, lesson, studentId) {
+  if (!shouldCountStudentLesson(group, lesson, studentId)) {
+    return `<td><span class="journal-mark neutral">—</span></td>`;
+  }
+
+  const record = getRecord(lesson, studentId);
+  return record.homework
+    ? `<td><span class="journal-mark present">✓</span></td>`
+    : `<td><span class="journal-mark homework-missing">Ні</span></td>`;
 }
 
 function renderAddStudentPanel(group, availableStudents) {
@@ -638,6 +850,7 @@ function renderGroupStatsTable(group) {
             <th>Екран не вмикав</th>
             <th>Низька активність</th>
             <th>Поведінка</th>
+            <th>Пропуски підряд</th>
           </tr>
         </thead>
         <tbody>
@@ -652,6 +865,7 @@ function renderGroupStatsTable(group) {
                   <td>${row.screenOff}</td>
                   <td>${row.lowActivity}</td>
                   <td>${row.behaviorAttention}</td>
+                  <td>${formatMissStreakCell(group, row.id)}</td>
                 </tr>
               `
             )
@@ -660,6 +874,13 @@ function renderGroupStatsTable(group) {
       </table>
     </div>
   `;
+}
+
+function formatMissStreakCell(group, studentId) {
+  const streak = getMissStreakInfo(group, studentId);
+  if (streak.current >= 2) return `<strong class="danger-text">${streak.current} зараз</strong>`;
+  if (streak.max >= 2) return `${streak.max} було`;
+  return "0";
 }
 
 function renderStudentPage(studentId) {
@@ -765,6 +986,7 @@ function handleClick(event) {
   if (action === "edit-course") openCourseModal(courseId);
   if (action === "delete-course") deleteCourse(courseId);
   if (action === "set-dashboard-view") setDashboardView(view);
+  if (action === "set-group-view") setGroupView(view);
   if (action === "open-group") location.hash = `group/${groupId}`;
   if (action === "open-student") location.hash = `student/${studentId}`;
   if (action === "go-dashboard") location.hash = "";
@@ -778,6 +1000,11 @@ function handleClick(event) {
 function setDashboardView(view) {
   ui.dashboardView = view || "today";
   renderDashboard();
+}
+
+function setGroupView(view) {
+  ui.groupView = view || "lessons";
+  render();
 }
 
 function handleChange(event) {
@@ -1089,6 +1316,10 @@ function getFirstOpenLessonIndex(group) {
   return nextIndex === -1 ? group.lessons.length - 1 : nextIndex;
 }
 
+function getHeldLessons(group) {
+  return group.lessons.filter((lesson) => lesson.held).sort((a, b) => a.order - b.order);
+}
+
 function getGroupStats(group) {
   const rows = getGroupStudentRows(group);
   return {
@@ -1096,6 +1327,62 @@ function getGroupStats(group) {
     totalMisses: rows.reduce((sum, row) => sum + row.missed, 0),
     totalHomeworkMissing: rows.reduce((sum, row) => sum + row.homeworkMissing, 0),
   };
+}
+
+function getGroupStudentsForJournal(group) {
+  const studentIds = new Set(group.studentIds);
+
+  group.lessons.forEach((lesson) => {
+    Object.keys(lesson.records || {}).forEach((studentId) => studentIds.add(studentId));
+  });
+
+  return [...studentIds]
+    .map((studentId) => findStudent(studentId))
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name, "uk"));
+}
+
+function countMissedLessons(group, studentId) {
+  return getHeldLessons(group).reduce((sum, lesson) => {
+    if (!shouldCountStudentLesson(group, lesson, studentId)) return sum;
+    return getRecord(lesson, studentId).present ? sum : sum + 1;
+  }, 0);
+}
+
+function countHomeworkMissing(group, studentId) {
+  return getHeldLessons(group).reduce((sum, lesson) => {
+    if (!shouldCountStudentLesson(group, lesson, studentId)) return sum;
+    return getRecord(lesson, studentId).homework ? sum : sum + 1;
+  }, 0);
+}
+
+function getMissStreakInfo(group, studentId) {
+  let current = 0;
+  let currentDates = [];
+  let max = 0;
+  let maxDates = [];
+
+  getHeldLessons(group).forEach((lesson) => {
+    if (!shouldCountStudentLesson(group, lesson, studentId)) return;
+
+    const record = getRecord(lesson, studentId);
+    if (!record.present) {
+      current += 1;
+      currentDates.push(formatJournalDate(lesson));
+
+      if (current > max) {
+        max = current;
+        maxDates = [...currentDates];
+      }
+
+      return;
+    }
+
+    current = 0;
+    currentDates = [];
+  });
+
+  return { current, currentDates, max, maxDates };
 }
 
 function getGroupStudentRows(group) {
@@ -1288,6 +1575,16 @@ function formatDate(dateString) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+  }).format(date);
+}
+
+function formatJournalDate(lesson) {
+  if (!lesson.date) return `Урок ${lesson.order}`;
+
+  const date = new Date(`${lesson.date}T00:00:00`);
+  return new Intl.DateTimeFormat("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
   }).format(date);
 }
 
